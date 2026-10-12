@@ -16,8 +16,14 @@ class AuthenticatedSessionController extends Controller
     /**
      * Display the login view.
      */
-    public function create(): Response
+    public function create(Request $request): Response|RedirectResponse
     {
+        if ($request->filled('e')) {
+            return redirect()
+                ->route('portal.callback', ['e' => $request->query('e')])
+                ->header('Referrer-Policy', 'no-referrer');
+        }
+
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),

@@ -83,6 +83,7 @@ Route ::middleware('auth')->group(function () {
     Route::get('/maintenance/print', [MaintenanceController::class, 'print'])->name('maintenance.print');
     Route::get('/maintenance/technicians', [MaintenanceController::class, 'technicians'])->name('maintenance.technicians');
     Route::get('/maintenance/tool-lookup', [MaintenanceController::class, 'toolLookup'])->name('maintenance.tool-lookup');
+    Route::get('/record/{id}/files/{file}', [RecordController::class, 'showFile'])->whereNumber(['id', 'file'])->name('record.files.show');
 });
 
 // เขียน/แก้/ยกเลิกใบสั่งงาน — ผู้ใช้ Read Only (permission5) ถูกส่งกลับหน้า Dashboard
@@ -93,6 +94,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::get('/record/{id}/edit', [RecordController::class, 'edit'])->name('record.edit');
     Route::get('/record/{id}/cancel', [RecordController::class, 'cancel'])->name('record.cancel');
     Route::put('/record/{id}/cancel', [RecordController::class, 'cancelSave'])->name('record.cancel.save');
+    Route::delete('/record/{id}/files/{file}', [RecordController::class, 'destroyFile'])->whereNumber(['id', 'file'])->name('record.files.destroy');
 });
 
 Route::middleware('auth', 'permission:permission1')->group(function () {

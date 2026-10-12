@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 // use Barryvdh\DomPDF\Facade\Pdf;
 use App\Exports\JobOrderExport;
@@ -17,6 +18,12 @@ class RecordController extends Controller
     private const JOB_TYPES = ['urgent', 'maintenance', 'install', 'audit', 'internal'];
     private const ALLOWED_DOC_EXT = ['jpg', 'jpeg', 'png', 'pdf', 'xlsx', 'xls', 'doc', 'docx'];
     private const MAX_DOC_COUNT = 3;
+
+    /** ไฟล์แนบเก็บใน disk 'local' (storage/app/private) — เปิดได้เฉพาะผ่าน route ที่ต้อง login */
+    private const ATTACH_DISK = 'local';
+    private const ATTACH_DIR  = 'job_order_files';
+    /** ชนิดไฟล์ที่ให้เบราว์เซอร์เปิดดูในแท็บใหม่ได้เลย ที่เหลือจะเป็นการดาวน์โหลด */
+    private const INLINE_EXT  = ['pdf', 'jpg', 'jpeg', 'png'];
 
     /**
      * GET /record/{id} — เปิดหน้า Record แบบส่วนบนอ่านอย่างเดียว (ปุ่ม "Record")
@@ -236,6 +243,8 @@ class RecordController extends Controller
 
         return Inertia::render('Order/Record_JobOrder', [
             'editable' => $editable,
+            'attachments' => $this->attachmentsFor($jobOrder->id),
+            'maxDocCount' => self::MAX_DOC_COUNT,
             'partSuggestions' => DB::table('job_order_sub as s')
                 ->join('job_order as j', 'j.id', '=', 's.job_id')
                 ->where('j.id_tool', $jobOrder->id_tool)
@@ -486,18 +495,32 @@ class RecordController extends Controller
                 $slotsLeft = self::MAX_DOC_COUNT - $existingCount;
                 $files = array_slice($request->file('file_job'), 0, max($slotsLeft, 0));
 
-                foreach ($files as $file) {
-                    $ext = strtolower($file->getClientOriginalExtension());
-                    $originalName = $file->getClientOriginalName();
+                $storedPaths = [];
+                try {
+                    foreach ($files as $file) {
+                        $ext = strtolower($file->getClientOriginalExtension());
+                        $originalName = $file->getClientOriginalName();
 
-                    $fileId = DB::table('job_order_file')->insertGetId([
-                        'id_job' => $jobOrder->id,
-                        'name'   => $originalName,
+                        $fileId = DB::table('job_order_file')->insertGetId([
+                            'id_job' => $jobOrder->id,
+                            'name'   => $originalName,
+                        ]);
+
+                        // เก็บแบบส่วนตัว (ไม่มี URL สาธารณะ) เปิดได้ผ่าน route record.files.show เท่านั้น
+                        $storedName = base64_encode((string) $fileId) . '.' . $ext;
+                        $path = $file->storeAs(self::ATTACH_DIR, $storedName, self::ATTACH_DISK);
+                        if ($path === false) {
+                            throw new \RuntimeException("บันทึกไฟล์ {$originalName} ไม่สำเร็จ");
+                        }
+                        $storedPaths[] = $path;
+                    }
+                } catch (\Throwable $e) {
+                    // ยกเลิกทั้งชุด: ลบไฟล์ที่เขียนไปแล้ว แล้วให้ transaction rollback ข้อมูลใน DB
+                    Storage::disk(self::ATTACH_DISK)->delete($storedPaths);
+                    report($e);
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'file_job' => 'บันทึกไฟล์แนบไม่สำเร็จ ยังไม่มีข้อมูลใดถูกบันทึก กรุณาลองใหม่',
                     ]);
-
-                    $storedName = base64_encode((string) $fileId) . '.' . $ext;
-                    // ต้องรัน `php artisan storage:link` ไว้ก่อน ถ้าต้องการเข้าถึงไฟล์ผ่าน URL สาธารณะ
-                    $file->storeAs('job_order_files', $storedName, 'public');
                 }
             }
         });
@@ -506,6 +529,94 @@ class RecordController extends Controller
         return redirect()
         ->route('record-tool', $jobOrder->id_tool)
         ->with('success', 'บันทึกข้อมูลเรียบร้อยแล้ว');
+    }
+
+    /**
+     * GET /record/{id}/files/{file} — เปิด/ดาวน์โหลดไฟล์แนบ (ต้อง login)
+     * PDF และรูปภาพเปิดในเบราว์เซอร์ ไฟล์อื่นดาวน์โหลด ใช้ชื่อไฟล์เดิมที่ผู้ใช้อัปโหลด
+     */
+    public function showFile(int $id, int $file)
+    {
+        $row = DB::table('job_order_file')->where('id', $file)->where('id_job', $id)->first();
+        abort_if(!$row, 404, 'ไม่พบไฟล์แนบนี้');
+
+        $found = $this->locateFile($row);
+        abort_if(!$found, 404, 'ไม่พบไฟล์ในเซิร์ฟเวอร์ (อาจถูกลบหรือยังไม่ได้ย้ายมาจากระบบเดิม)');
+
+        [$disk, $path] = $found;
+        $ext = strtolower(pathinfo($row->name, PATHINFO_EXTENSION));
+        $disposition = in_array($ext, self::INLINE_EXT, true) ? 'inline' : 'attachment';
+
+        return Storage::disk($disk)->response($path, $row->name, [
+            'X-Content-Type-Options' => 'nosniff',
+        ], $disposition);
+    }
+
+    /**
+     * DELETE /record/{id}/files/{file} — ลบไฟล์แนบ (ผู้ใช้ Read Only ถูกกันด้วย readonly.block)
+     */
+    public function destroyFile(int $id, int $file)
+    {
+        $row = DB::table('job_order_file')->where('id', $file)->where('id_job', $id)->first();
+        abort_if(!$row, 404, 'ไม่พบไฟล์แนบนี้');
+
+        if ($found = $this->locateFile($row)) {
+            [$disk, $path] = $found;
+            Storage::disk($disk)->delete($path);
+        }
+        DB::table('job_order_file')->where('id', $row->id)->delete();
+
+        return back()->with('success', "ลบไฟล์ {$row->name} แล้ว");
+    }
+
+    /** รายการไฟล์แนบของใบงาน สำหรับแสดงในหน้า Record */
+    private function attachmentsFor(int $jobId): array
+    {
+        return DB::table('job_order_file')
+            ->where('id_job', $jobId)
+            ->orderBy('id')
+            ->get()
+            ->map(function ($f) use ($jobId) {
+                $found = $this->locateFile($f);
+
+                return [
+                    'id'      => $f->id,
+                    'name'    => $f->name,
+                    'url'     => route('record.files.show', ['id' => $jobId, 'file' => $f->id]),
+                    'size'    => $found ? Storage::disk($found[0])->size($found[1]) : null,
+                    'missing' => $found === null,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * หาไฟล์จริงของ record ใน job_order_file
+     * ลำดับ: disk ส่วนตัว (ระบบใหม่) → disk public (ไฟล์ที่อัปโหลดก่อนแก้ระบบนี้) → ชื่อแบบระบบเดิมที่ไม่มีนามสกุล
+     *
+     * @return array{0: string, 1: string}|null [disk, path]
+     */
+    private function locateFile(object $row): ?array
+    {
+        $base = base64_encode((string) $row->id);
+        $ext  = strtolower(pathinfo((string) $row->name, PATHINFO_EXTENSION));
+
+        $names = array_filter([$ext !== '' ? "{$base}.{$ext}" : null, $base]);
+        $candidates = [];
+        foreach ([self::ATTACH_DISK, 'public'] as $disk) {
+            foreach ($names as $name) {
+                $candidates[] = [$disk, self::ATTACH_DIR . '/' . $name];
+            }
+        }
+        // ไฟล์ที่คัดลอกมาจากระบบเดิม (โฟลเดอร์ files_job) ถ้าวางไว้ใน storage/app/private/files_job
+        $candidates[] = [self::ATTACH_DISK, 'files_job/' . $base];
+
+        foreach ($candidates as [$disk, $path]) {
+            if (Storage::disk($disk)->exists($path)) {
+                return [$disk, $path];
+            }
+        }
+        return null;
     }
 
     /**

@@ -18,12 +18,22 @@ class JobOrderTypeController extends Controller
 
     public function store(Request $request)
     {
+        $user = $request->user();
+        abort_if($user->permission5 == '1' || $user->permission2 != '1', 403, 'คุณไม่มีสิทธิ์เพิ่มข้อมูล');
+
+        $request->merge(['code' => strtoupper(trim((string) $request->input('code')))]);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50',
+            'code' => 'required|string|size:7|unique:code,code',
             'type_code' => 'required|integer|in:0,1,2',
+        ], [
+            'code.required' => 'กรุณาใส่รหัส',
+            'code.size'     => 'รหัสต้องยาว 7 ตัวอักษร ตามรหัสทรัพย์สิน 7 ตัวแรก เช่น RT-HCXX',
+            'code.unique'   => 'มีรหัสนี้อยู่แล้ว',
         ]);
 
+        $validated['name'] = trim($validated['name']);
         JobOrderType::create($validated);
 
         return redirect()->route('job-order-types.index')->with('success', 'เพิ่มรายการสำเร็จ');
@@ -67,7 +77,7 @@ class JobOrderTypeController extends Controller
         return back();
     }
 
-    public function destroy(JobOrderType $jobOrderType)
+    public function destroy(Request $request, JobOrderType $jobOrderType)
     {
         $user = $request->user();
         abort_if($user->permission5 == '1' || $user->permission4 != '1', 403, 'คุณไม่มีสิทธิ์ลบข้อมูล');

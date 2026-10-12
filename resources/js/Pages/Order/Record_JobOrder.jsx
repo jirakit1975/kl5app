@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { useMemo } from 'react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { useMemo, useState } from 'react';
 
 const JOB_TYPES = [
     { value: 'urgent', label: 'ซ่อมเร่งด่วน' },
@@ -14,6 +14,13 @@ const JOB_TYPES = [
 const ALLOWED_DOC_EXT = ['jpg', 'jpeg', 'png', 'pdf', 'xlsx', 'xls', 'doc', 'docx'];
 const MAX_DOC_SIZE_MB = 5;
 const MAX_DOC_COUNT = 3;
+
+function formatSize(bytes) {
+    if (bytes == null) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function Field({ label, children }) {
     return (
@@ -129,7 +136,7 @@ function RadioOption({ editable, checked, onChange, name, label }) {
     );
 }
 
-export default function Record({ tool, jobOrder, editable = false, partSuggestions = [] }) {
+export default function Record({ tool, jobOrder, editable = false, partSuggestions = [], attachments = [], maxDocCount = MAX_DOC_COUNT }) {
     // ผู้ใช้ Read Only ดูได้อย่างเดียว (route บันทึกมี readonly.block กันไว้ฝั่ง server แล้ว)
     const isReadOnly = usePage().props.auth.user.permission5 == '1';
 
@@ -245,12 +252,26 @@ export default function Record({ tool, jobOrder, editable = false, partSuggestio
             valid.push(file);
         }
 
-        if (data.file_job.length + valid.length > MAX_DOC_COUNT) {
-            alert(`แนบไฟล์ได้สูงสุด ${MAX_DOC_COUNT} ไฟล์`);
+        if (data.file_job.length + valid.length > slotsLeft) {
+            alert(`ใบงานนี้แนบไฟล์ได้อีก ${slotsLeft} ไฟล์ (รวมไม่เกิน ${maxDocCount} ไฟล์)`);
         }
 
-        setData('file_job', [...data.file_job, ...valid].slice(0, MAX_DOC_COUNT));
+        setData('file_job', [...data.file_job, ...valid].slice(0, slotsLeft));
         e.target.value = '';
+    }
+
+    // ---------- ไฟล์แนบที่บันทึกไว้แล้ว ----------
+    const slotsLeft = Math.max(maxDocCount - attachments.length, 0);
+    const [deletingFileId, setDeletingFileId] = useState(null);
+
+    function deleteAttachment(file) {
+        if (!confirm(`ต้องการลบไฟล์ "${file.name}" ใช่ไหม?\nลบแล้วกู้คืนไม่ได้`)) return;
+        setDeletingFileId(file.id);
+        router.delete(route('record.files.destroy', { id: jobOrder.id, file: file.id }), {
+            preserveScroll: true,
+            preserveState: true, // ข้อมูลที่พิมพ์ค้างไว้ในฟอร์มยังอยู่
+            onFinish: () => setDeletingFileId(null),
+        });
     }
 
     function removeFile(index) {
@@ -701,16 +722,66 @@ export default function Record({ tool, jobOrder, editable = false, partSuggestio
                             </div>
 
                             <div className="space-y-3 px-6 py-6">
-                                <input
-                                    type="file"
-                                    multiple
-                                    accept=".jpg,.jpeg,.png,.pdf,.xlsx,.xls,.doc,.docx"
-                                    onChange={handleFileChange}
-                                    className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
-                                />
-                                <p className="text-xs text-gray-400">
-                                    แนบได้สูงสุด {MAX_DOC_COUNT} ไฟล์ (.jpg .png .pdf .xlsx .xls .doc .docx) ไฟล์ละไม่เกิน {MAX_DOC_SIZE_MB}MB
-                                </p>
+                                {/* ไฟล์ที่แนบไว้แล้ว */}
+                                {attachments.length > 0 ? (
+                                    <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+                                        {attachments.map((f) => (
+                                            <li key={f.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                                                <svg className="h-4 w-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.17 7.83 8.6 14.4a2 2 0 1 0 2.83 2.83l6.57-6.57a4 4 0 0 0-5.66-5.66L5.6 11.74a6 6 0 0 0 8.49 8.49l5.66-5.66" />
+                                                </svg>
+                                                {f.missing ? (
+                                                    <span className="min-w-0 flex-1 truncate text-gray-400" title="ไม่พบไฟล์ในเซิร์ฟเวอร์">
+                                                        {f.name} <span className="text-xs text-amber-600">(ไม่พบไฟล์)</span>
+                                                    </span>
+                                                ) : (
+                                                    <a
+                                                        href={f.url}
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        className="min-w-0 flex-1 truncate text-indigo-600 hover:underline"
+                                                    >
+                                                        {f.name}
+                                                    </a>
+                                                )}
+                                                <span className="shrink-0 text-xs tabular-nums text-gray-400">{formatSize(f.size)}</span>
+                                                {!isReadOnly && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => deleteAttachment(f)}
+                                                        disabled={deletingFileId === f.id}
+                                                        className="shrink-0 text-xs text-red-500 hover:underline disabled:opacity-50"
+                                                    >
+                                                        {deletingFileId === f.id ? 'กำลังลบ...' : 'ลบ'}
+                                                    </button>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="text-sm text-gray-400">ยังไม่มีไฟล์แนบ</p>
+                                )}
+
+                                {/* แนบไฟล์ใหม่ (บันทึกเมื่อกด Save) */}
+                                {!isReadOnly && slotsLeft > 0 && (
+                                    <>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            accept=".jpg,.jpeg,.png,.pdf,.xlsx,.xls,.doc,.docx"
+                                            onChange={handleFileChange}
+                                            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+                                        />
+                                        <p className="text-xs text-gray-400">
+                                            แนบได้อีก {slotsLeft} ไฟล์ (รวมไม่เกิน {maxDocCount} ไฟล์) .jpg .png .pdf .xlsx .xls .doc .docx ไฟล์ละไม่เกิน {MAX_DOC_SIZE_MB}MB — ไฟล์จะถูกบันทึกเมื่อกด Save
+                                        </p>
+                                    </>
+                                )}
+                                {!isReadOnly && slotsLeft === 0 && (
+                                    <p className="text-xs text-gray-400">
+                                        แนบครบ {maxDocCount} ไฟล์แล้ว ถ้าต้องการแนบไฟล์ใหม่ ให้ลบไฟล์เดิมออกก่อน
+                                    </p>
+                                )}
                                 {data.file_job.length > 0 && (
                                     <ul className="space-y-1 text-sm text-gray-700">
                                         {data.file_job.map((f, i) => (

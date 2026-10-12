@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { useMemo } from 'react';
 
 const JOB_TYPES = [
@@ -130,6 +130,9 @@ function RadioOption({ editable, checked, onChange, name, label }) {
 }
 
 export default function Record({ tool, jobOrder, editable = false, partSuggestions = [] }) {
+    // ผู้ใช้ Read Only ดูได้อย่างเดียว (route บันทึกมี readonly.block กันไว้ฝั่ง server แล้ว)
+    const isReadOnly = usePage().props.auth.user.permission5 == '1';
+
     const machineLabel = tool
         ? `${tool.name ?? ''}${tool.asset ? ` | ${tool.asset}` : ''}`
         : '';
@@ -740,13 +743,17 @@ export default function Record({ tool, jobOrder, editable = false, partSuggestio
                             )}
 
                             <div className="flex items-center justify-center gap-3 border-t border-gray-100 px-6 py-6">
-                                <button
-                                    type="submit"
-                                    disabled={processing}
-                                    className="rounded-lg bg-indigo-600 px-6 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
-                                >
-                                    {processing ? 'กำลังบันทึก...' : 'Save'}
-                                </button>
+                                {isReadOnly ? (
+                                    <p className="text-sm text-gray-500">บัญชีของคุณเป็นแบบอ่านอย่างเดียว ไม่สามารถบันทึกได้</p>
+                                ) : (
+                                    <button
+                                        type="submit"
+                                        disabled={processing}
+                                        className="rounded-lg bg-indigo-600 px-6 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
+                                    >
+                                        {processing ? 'กำลังบันทึก...' : 'Save'}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </form>

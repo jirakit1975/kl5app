@@ -69,6 +69,9 @@ class JobOrderTypeController extends Controller
 
     public function destroy(JobOrderType $jobOrderType)
     {
+        $user = $request->user();
+        abort_if($user->permission5 == '1' || $user->permission4 != '1', 403, 'คุณไม่มีสิทธิ์ลบข้อมูล');
+
         $jobOrderType->delete();
 
         return redirect()->route('job-order-types.index')->with('success', 'ลบรายการสำเร็จ');

@@ -101,6 +101,7 @@ export default function Index({ tools, filters }) {
 
     return (
         <AuthenticatedLayout
+            hideFlash
             header={
                 <h2 className="text-xl font-semibold leading-tight text-gray-800">
                     Machine List

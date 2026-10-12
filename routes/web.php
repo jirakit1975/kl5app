@@ -33,6 +33,35 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+// Route ::middleware('auth')->group(function () {
+//     Route::get('/machine-list', [ToolController::class, 'index'])->name('machine-list');
+//     Route::delete('/machine-list/{tool}', [ToolController::class, 'destroy'])->name('machine-list.destroy');
+//     Route::get('/record-tool/{tool}', [ToolController::class, 'show'])->name('record-tool');
+//     Route::get('/add-tool', [ToolController::class, 'create']);
+//     Route::post('/add-tool', [ToolController::class, 'store']);
+//     Route::get('/edit-tool/{tool}', [ToolController::class, 'edit']);
+//     Route::put('/edit-tool/{tool}', [ToolController::class, 'update']);
+//     Route::post('/import-tools', [ToolController::class, 'import'])->name('tools.import');
+//     Route::get('/job-order/create/{tool}', [ToolController::class, 'createJobOrder'])->name('job-order.create');
+//     Route::post('/job-order', [ToolController::class, 'storeJobOrder'])->name('job-order.store');
+//     Route::get('/record/{id}', [RecordController::class, 'show']);
+//     Route::post('/record/{id}', [RecordController::class, 'store']);
+//     Route::get('/record/{id}/edit', [RecordController::class, 'edit']);
+//     Route::get('/record/{id}/cancel', [RecordController::class, 'cancel'])->name('record.cancel');
+//     Route::put('/record/{id}/cancel', [RecordController::class, 'cancelSave'])->name('record.cancel');
+//     Route::get('/record/{id}/print', [RecordController::class, 'print'])->name('record.print');
+//     Route ::get('/job-order-home',[RecordController::class, 'jobOrderHome'])->name('job-order-home');
+//     Route::get('/job-order-home/export', [RecordController::class, 'jobOrderHomeExport'])->name('job-order-home.export');
+//     Route::get('/job-order-home/print', [RecordController::class, 'jobOrderHomePrint'])->name('job-order-home.print');
+//     Route::get('/maintenance', [MaintenanceController::class, 'index'])->name('maintenance');
+//     Route::post('/maintenance', [MaintenanceController::class, 'store'])->name('maintenance.store');
+//     Route::patch('/maintenance/{id}', [MaintenanceController::class, 'update'])->whereNumber('id')->name('maintenance.update');
+//     Route::delete('/maintenance/{id}', [MaintenanceController::class, 'destroy'])->whereNumber('id')->name('maintenance.destroy');
+//     Route::get('/maintenance/print', [MaintenanceController::class, 'print'])->name('maintenance.print');
+//     Route::get('/maintenance/technicians', [MaintenanceController::class, 'technicians'])->name('maintenance.technicians');
+//     Route::get('/maintenance/tool-lookup', [MaintenanceController::class, 'toolLookup'])->name('maintenance.tool-lookup');
+// });
+
 Route ::middleware('auth')->group(function () {
     Route::get('/machine-list', [ToolController::class, 'index'])->name('machine-list');
     Route::delete('/machine-list/{tool}', [ToolController::class, 'destroy'])->name('machine-list.destroy');
@@ -42,13 +71,7 @@ Route ::middleware('auth')->group(function () {
     Route::get('/edit-tool/{tool}', [ToolController::class, 'edit']);
     Route::put('/edit-tool/{tool}', [ToolController::class, 'update']);
     Route::post('/import-tools', [ToolController::class, 'import'])->name('tools.import');
-    Route::get('/job-order/create/{tool}', [ToolController::class, 'createJobOrder'])->name('job-order.create');
-    Route::post('/job-order', [ToolController::class, 'storeJobOrder'])->name('job-order.store');
     Route::get('/record/{id}', [RecordController::class, 'show']);
-    Route::post('/record/{id}', [RecordController::class, 'store']);
-    Route::get('/record/{id}/edit', [RecordController::class, 'edit']);
-    Route::get('/record/{id}/cancel', [RecordController::class, 'cancel'])->name('record.cancel');
-    Route::put('/record/{id}/cancel', [RecordController::class, 'cancelSave'])->name('record.cancel');
     Route::get('/record/{id}/print', [RecordController::class, 'print'])->name('record.print');
     Route ::get('/job-order-home',[RecordController::class, 'jobOrderHome'])->name('job-order-home');
     Route::get('/job-order-home/export', [RecordController::class, 'jobOrderHomeExport'])->name('job-order-home.export');
@@ -62,8 +85,19 @@ Route ::middleware('auth')->group(function () {
     Route::get('/maintenance/tool-lookup', [MaintenanceController::class, 'toolLookup'])->name('maintenance.tool-lookup');
 });
 
+// เขียน/แก้/ยกเลิกใบสั่งงาน — ผู้ใช้ Read Only (permission5) ถูกส่งกลับหน้า Dashboard
+Route::middleware(['auth', 'readonly.block'])->group(function () {
+    Route::get('/job-order/create/{tool}', [ToolController::class, 'createJobOrder'])->name('job-order.create');
+    Route::post('/job-order', [ToolController::class, 'storeJobOrder'])->name('job-order.store');
+    Route::post('/record/{id}', [RecordController::class, 'store'])->name('record.store');
+    Route::get('/record/{id}/edit', [RecordController::class, 'edit'])->name('record.edit');
+    Route::get('/record/{id}/cancel', [RecordController::class, 'cancel'])->name('record.cancel');
+    Route::put('/record/{id}/cancel', [RecordController::class, 'cancelSave'])->name('record.cancel.save');
+});
+
 Route::middleware('auth', 'permission:permission1')->group(function () {
     Route::get('/user-permissions', [UserPermissionController::class, 'index'])->name('user-permissions.index');
+    Route::post('/user-permissions', [UserPermissionController::class, 'store'])->name('user-permissions.store');
     Route::patch('/user-permissions/{user}', [UserPermissionController::class, 'update'])->name('user-permissions.update');   
 });
 

@@ -771,6 +771,7 @@ export default function Mainten_Status({ items, filters, counts, can }) {
 
     return (
         <AuthenticatedLayout
+            hideFlash
             header={
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <h2 className="text-xl font-semibold leading-tight text-gray-800">Maintenance Status</h2>

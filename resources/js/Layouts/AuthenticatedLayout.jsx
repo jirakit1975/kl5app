@@ -1,12 +1,14 @@
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import Dropdown from '@/Components/Dropdown';
+import FlashMessage from '@/Components/FlashMessage';
 import NavLink from '@/Components/NavLink';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink';
 import ThemeToggle from '@/Components/ThemeToggle';
 import { Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
-export default function AuthenticatedLayout({ header, children }) {
+// hideFlash: หน้าที่มีระบบแจ้งเตือนของตัวเองอยู่แล้ว (Machine List, Maintenance) ใส่ไว้กันข้อความซ้ำ
+export default function AuthenticatedLayout({ header, children, hideFlash = false }) {
     const user = usePage().props.auth.user;
     const isReadOnly = user.permission5 == '1';
     const isAdmin = user.permission1 == '1';
@@ -246,6 +248,8 @@ export default function AuthenticatedLayout({ header, children }) {
                     </div>
                 </header>
             )}
+
+            {!hideFlash && <FlashMessage />}
 
             <main>{children}</main>
         </div>

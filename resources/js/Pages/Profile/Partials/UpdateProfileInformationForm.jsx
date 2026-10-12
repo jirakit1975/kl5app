@@ -59,14 +59,14 @@ export default function UpdateProfileInformation({
                     <TextInput
                         id="email"
                         type="email"
-                        className="mt-1 block w-full"
+                        className="mt-1 block w-full bg-gray-50 text-gray-500"
                         value={data.email}
-                        onChange={(e) => setData('email', e.target.value)}
-                        required
+                        readOnly
                         autoComplete="username"
                     />
-
-                    <InputError className="mt-2" message={errors.email} />
+                    <p className="mt-1 text-xs text-gray-500">
+                        อีเมลใช้ยืนยันตัวตนกับ RITTA Portal จึงแก้ไขเองไม่ได้ หากต้องการเปลี่ยน กรุณาติดต่อผู้ดูแลระบบ
+                    </p>
                 </div>
 
                 {mustVerifyEmail && user.email_verified_at === null && (

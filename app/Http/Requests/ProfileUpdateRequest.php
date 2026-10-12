@@ -2,10 +2,8 @@
 
 namespace App\Http\Requests;
 
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class ProfileUpdateRequest extends FormRequest
 {
@@ -18,14 +16,8 @@ class ProfileUpdateRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'email' => [
-                'required',
-                'string',
-                'lowercase',
-                'email',
-                'max:255',
-                Rule::unique(User::class)->ignore($this->user()->id),
-            ],
+            // อีเมลแก้เองไม่ได้: Portal login ผูกบัญชีด้วยอีเมล — ถ้าเปลี่ยนได้ ผู้ใช้จะเปลี่ยนเป็นอีเมลของคนอื่น
+            // แล้วได้บัญชีนั้นเมื่อเจ้าของจริง login ผ่าน portal (ให้ Admin แก้ใน DB หรือสร้างบัญชีใหม่แทน)
         ];
     }
 }
